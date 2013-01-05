@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2008 Team MediaPortal
+ *  Copyright (C) 2005-2012 Team MediaPortal
  *  http://www.team-mediaportal.com
  *
  *  This Program is free software; you can redistribute it and/or modify
@@ -43,68 +43,197 @@
 #include "version.h"
 #include "..\..\shared\DebugSettings.h"
 #include <cassert>
+#include <queue>
 
 // For more details for memory leak detection see the alloctracing.h header
 #include "..\..\alloctracing.h"
 
-static char logFile[MAX_PATH];
-static WORD logFileParsed = -1;
+//static char logFile[MAX_PATH];
+//static WORD logFileParsed = -1;
 
 DWORD m_tGTStartTime = 0;
 
 DEFINE_MP_DEBUG_SETTING(DoNotAllowSlowMotionDuringZapping)
 
-void GetLogFile(char *pLog)
+//void GetLogFile(char *pLog)
+//{
+//  SYSTEMTIME systemTime;
+//  GetLocalTime(&systemTime);
+//  if(logFileParsed != systemTime.wDay)
+//  {
+//    TCHAR folder[MAX_PATH];
+//    ::SHGetSpecialFolderPath(NULL,folder,CSIDL_COMMON_APPDATA,FALSE);
+//    sprintf(logFile,"%s\\Team MediaPortal\\MediaPortal\\Log\\TsReader-%04.4d-%02.2d-%02.2d.Log",folder, systemTime.wYear, systemTime.wMonth, systemTime.wDay);
+//    logFileParsed=systemTime.wDay; // rec
+//  }
+//  strcpy(pLog, &logFile[0]);
+//}
+//
+//
+//void LogDebug(const char *fmt, ...)
+//{
+//  va_list ap;
+//  va_start(ap,fmt);
+//
+//  char buffer[1000];
+//  int tmp;
+//  va_start(ap,fmt);
+//  tmp=vsprintf(buffer, fmt, ap);
+//  va_end(ap);
+//  SYSTEMTIME systemTime;
+//  GetLocalTime(&systemTime);
+//
+////#ifdef DONTLOG
+//  TCHAR filename[1024];
+//  GetLogFile(filename);
+//  FILE* fp = fopen(filename,"a+");
+//
+//  if (fp!=NULL)
+//  {
+//    fprintf(fp,"%02.2d-%02.2d-%04.4d %02.2d:%02.2d:%02.2d.%03.3d [%x]%s\n",
+//      systemTime.wDay, systemTime.wMonth, systemTime.wYear,
+//      systemTime.wHour,systemTime.wMinute,systemTime.wSecond,
+//      systemTime.wMilliseconds,
+//      GetCurrentThreadId(),
+//      buffer);
+//    fclose(fp);
+//  }
+////#endif
+//  char buf[1000];
+//  sprintf(buf,"%02.2d-%02.2d-%04.4d %02.2d:%02.2d:%02.2d %s\n",
+//    systemTime.wDay, systemTime.wMonth, systemTime.wYear,
+//    systemTime.wHour,systemTime.wMinute,systemTime.wSecond,
+//    buffer);
+//  //::OutputDebugString(buf);
+//};
+
+//-------------------- Async logging methods -------------------------------------------------
+
+CCritSec m_qLock;
+CCritSec m_logFileLock;
+std::queue<std::string> m_logQueue;
+BOOL m_bLoggerRunning;
+HANDLE m_hLogger = NULL;
+CAMEvent m_EndLoggingEvent;
+
+void LogPath(TCHAR* dest, TCHAR* name)
 {
-  SYSTEMTIME systemTime;
-  GetLocalTime(&systemTime);
-  if(logFileParsed != systemTime.wDay)
-  {
-    TCHAR folder[MAX_PATH];
-    ::SHGetSpecialFolderPath(NULL,folder,CSIDL_COMMON_APPDATA,FALSE);
-    sprintf(logFile,"%s\\Team MediaPortal\\MediaPortal\\Log\\TsReader-%04.4d-%02.2d-%02.2d.Log",folder, systemTime.wYear, systemTime.wMonth, systemTime.wDay);
-    logFileParsed=systemTime.wDay; // rec
-  }
-  strcpy(pLog, &logFile[0]);
+  TCHAR folder[MAX_PATH];
+  SHGetSpecialFolderPath(NULL,folder,CSIDL_COMMON_APPDATA,FALSE);
+  _stprintf(dest, _T("%s\\Team Mediaportal\\MediaPortal\\log\\TsReader.%s"), folder, name);
 }
 
 
-void LogDebug(const char *fmt, ...)
+void LogRotate()
 {
+  CAutoLock lock(&m_logFileLock);
+  TCHAR fileName[MAX_PATH];
+  LogPath(fileName, _T("log"));
+  TCHAR bakFileName[MAX_PATH];
+  LogPath(bakFileName, _T("bak"));
+  _tremove(bakFileName);
+  _trename(fileName, bakFileName);
+}
+
+
+string GetLogLine()
+{
+  CAutoLock lock(&m_qLock);
+  if ( m_logQueue.size() == 0 )
+  {
+    return "";
+  }
+  string ret = m_logQueue.front();
+  m_logQueue.pop();
+  return ret;
+}
+
+
+UINT CALLBACK LogThread(void* param)
+{
+  TCHAR fileName[MAX_PATH];
+  LogPath(fileName, _T("log"));
+  while ( m_bLoggerRunning || (m_logQueue.size() > 0) ) 
+  {
+    if ( m_logQueue.size() > 0 ) 
+    {
+      CAutoLock lock(&m_logFileLock);
+      FILE* fp = _tfopen(fileName, _T("a+"));
+      if (fp!=NULL)
+      {
+        SYSTEMTIME systemTime;
+        GetLocalTime(&systemTime);
+        string line = GetLogLine();
+        while (!line.empty())
+        {
+          fprintf(fp, "%s", line.c_str());
+          line = GetLogLine();
+        }
+        fclose(fp);
+      }
+    }
+    if (m_bLoggerRunning)
+    {
+      m_EndLoggingEvent.Wait(1000); //Sleep for 1000ms, unless thread is ending
+    }
+  }
+  return 0;
+}
+
+
+void StartLogger()
+{
+  UINT id;
+  m_hLogger = (HANDLE)_beginthreadex(NULL, 0, LogThread, 0, 0, &id);
+  SetThreadPriority(m_hLogger, THREAD_PRIORITY_BELOW_NORMAL);
+}
+
+
+void StopLogger()
+{
+  if (m_hLogger)
+  {
+    m_bLoggerRunning = FALSE;
+    m_EndLoggingEvent.Set();
+    WaitForSingleObject(m_hLogger, INFINITE);	
+    m_EndLoggingEvent.Reset();
+    m_hLogger = NULL;
+  }
+}
+
+
+void LogDebug(const char *fmt, ...) 
+{
+  static CCritSec lock;
   va_list ap;
   va_start(ap,fmt);
 
-  char buffer[1000];
+  CAutoLock logLock(&lock);
+  if (!m_hLogger) {
+    m_bLoggerRunning = true;
+    StartLogger();
+  }
+  char buffer[1000]; 
   int tmp;
   va_start(ap,fmt);
-  tmp=vsprintf(buffer, fmt, ap);
-  va_end(ap);
+  tmp = vsprintf(buffer, fmt, ap);
+  va_end(ap); 
+
   SYSTEMTIME systemTime;
   GetLocalTime(&systemTime);
-
-//#ifdef DONTLOG
-  TCHAR filename[1024];
-  GetLogFile(filename);
-  FILE* fp = fopen(filename,"a+");
-
-  if (fp!=NULL)
-  {
-    fprintf(fp,"%02.2d-%02.2d-%04.4d %02.2d:%02.2d:%02.2d.%03.3d [%x]%s\n",
-      systemTime.wDay, systemTime.wMonth, systemTime.wYear,
-      systemTime.wHour,systemTime.wMinute,systemTime.wSecond,
-      systemTime.wMilliseconds,
-      GetCurrentThreadId(),
-      buffer);
-    fclose(fp);
-  }
-//#endif
-  char buf[1000];
-  sprintf(buf,"%02.2d-%02.2d-%04.4d %02.2d:%02.2d:%02.2d %s\n",
+  char msg[5000];
+  sprintf_s(msg, 5000,"%02.2d-%02.2d-%04.4d %02.2d:%02.2d:%02.2d.%03.3d [%x]%s\n",
     systemTime.wDay, systemTime.wMonth, systemTime.wYear,
     systemTime.wHour,systemTime.wMinute,systemTime.wSecond,
+    systemTime.wMilliseconds,
+    GetCurrentThreadId(),
     buffer);
-  //::OutputDebugString(buf);
+  CAutoLock l(&m_qLock);
+  m_logQueue.push((string)msg);
 };
+
+//------------------------------------------------------------------------------------
+
 
 
 const AMOVIESETUP_MEDIATYPE acceptAudioPinTypes =
@@ -178,9 +307,12 @@ CTsReaderFilter::CTsReaderFilter(IUnknown *pUnk, HRESULT *phr):
   
   // use the following line if you are having trouble setting breakpoints
   // #pragma comment( lib, "strmbasd" )
-  TCHAR filename[1024];
-  GetLogFile(filename);
-  ::DeleteFile(filename);
+//  TCHAR filename[1024];
+//  GetLogFile(filename);
+//  ::DeleteFile(filename);
+
+//  LogRotate();
+
   LogDebug("----- Experimental noStopMod version -----");
   LogDebug("---------- v0.0.%d XXX -------------------", TSREADER_VERSION);
   
@@ -209,6 +341,8 @@ CTsReaderFilter::CTsReaderFilter(IUnknown *pUnk, HRESULT *phr):
   m_bDisableAddPMT = false;
   m_bForceFFDShowSyncFix = false;
   m_bUseFPSfromDTSPTS = true;
+  m_regInitialBuffDelay = INITIAL_BUFF_DELAY;
+  m_bEnableBufferLogging = false;
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\Team MediaPortal\\TsReader", 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
   {
@@ -261,6 +395,29 @@ CTsReaderFilter::CTsReaderFilter(IUnknown *pUnk, HRESULT *phr):
       m_bUseFPSfromDTSPTS = false;
     }
 
+    keyValue = (DWORD)m_regInitialBuffDelay;
+    LPCTSTR initialBuffDelay_RRK = TEXT("BufferingDelayInMilliSeconds");
+    ReadRegistryKeyDword(key, initialBuffDelay_RRK, keyValue);
+    if ((keyValue >= 0) && (keyValue <= 2000))
+    {
+      m_regInitialBuffDelay = (LONG)keyValue;
+      LogDebug("--- Buffering delay = %d ms", m_regInitialBuffDelay);
+    }
+    else
+    {
+      m_regInitialBuffDelay = INITIAL_BUFF_DELAY;
+      LogDebug("--- Buffering delay = %d ms (default value, allowed range is %d - %d)", m_regInitialBuffDelay, 0, 2000);
+    }
+    
+    keyValue = 0;
+    LPCTSTR enableBufferLogging = TEXT("EnableBufferLogging");
+    ReadRegistryKeyDword(key, enableBufferLogging, keyValue);
+    if (keyValue)
+    {
+      LogDebug("----- EnableBufferLogging -----");
+      m_bEnableBufferLogging = true;
+    }
+
     RegCloseKey(key);
   }
   
@@ -287,6 +444,7 @@ CTsReaderFilter::CTsReaderFilter(IUnknown *pUnk, HRESULT *phr):
   m_bAnalog = false;
   m_bStopping = false;
   m_bOnZap = false;
+  m_bDurationThreadBusy = false;
   m_bPauseOnClockTooFast = false;
   m_bForcePosnUpdate = false;
   SetMediaPosnUpdate(0) ;
@@ -312,7 +470,7 @@ CTsReaderFilter::~CTsReaderFilter()
 {
   LogDebug("CTsReaderFilter::dtor");
   //stop duration thread
-  StopThread();
+  StopThread(5000);
   
   HRESULT hr = m_pAudioPin->Disconnect();
   delete m_pAudioPin;
@@ -329,6 +487,7 @@ CTsReaderFilter::~CTsReaderFilter()
   if (m_fileDuration != NULL)
     delete m_fileDuration;
   LogDebug("CTsReaderFilter::dtor - finished");
+  //StopLogger();
 }
 
 STDMETHODIMP CTsReaderFilter::NonDelegatingQueryInterface(REFIID riid, void ** ppv)
@@ -607,10 +766,12 @@ STDMETHODIMP CTsReaderFilter::Run(REFERENCE_TIME tStart)
 
 STDMETHODIMP CTsReaderFilter::Stop()
 {
-  LogDebug("CTsReaderFilter::Stop()");
+  LogDebug("CTsReaderFilter::Stop(), state %d", m_State);
 
   CAutoLock cObjectLock(m_pLock);
 
+  HRESULT hr = S_OK;
+  
   //guarantees that audio/video/subtitle pins dont block in the fillbuffer() method
   m_bStopping = true;
 
@@ -631,11 +792,15 @@ STDMETHODIMP CTsReaderFilter::Stop()
     m_pSubtitlePin->SetRunningStatus(false);
   }
 
-
-  LogDebug("CTsReaderFilter::Stop()  -stop source");
-  //stop filter
-  HRESULT hr = CSource::Stop();
-  LogDebug("CTsReaderFilter::Stop()  -stop source done");
+  { //Context for CAutoLock
+    CAutoLock dLock (&m_DurationThreadLock);
+    CAutoLock rLock (&m_ReadAheadLock);
+    LogDebug("CTsReaderFilter::Stop()  -stop source, state %d", m_State);
+    //stop filter
+    hr = CSource::Stop();
+    WakeThread(); //Encourage duration thread to see 'stopped' state
+  }
+  LogDebug("CTsReaderFilter::Stop()  -stop source done, state %d", m_State);
 
 
   //are we using rtsp?
@@ -661,10 +826,12 @@ STDMETHODIMP CTsReaderFilter::Stop()
       Sleep(1);
     }
   }
-  LogDebug("CTsReaderFilter::Stop() done");
+    
+  LogDebug("CTsReaderFilter::Stop() done, state %d", m_State);
   m_bStoppedForUnexpectedSeek=true ;
   return hr;
 }
+
 bool CTsReaderFilter::IsTimeShifting()
 {
   return m_bTimeShifting;
@@ -1390,11 +1557,24 @@ void CTsReaderFilter::ThreadProc()
   {
     //if demuxer reached the end of the file, we can skip the loop
     //since we're no longer playing
-    if (m_demultiplexer.EndOfFile() || (m_State == State_Stopped))
+    if (m_demultiplexer.EndOfFile() || (State() == State_Stopped))
     {
       lastDurUpdate = 0;
       durationUpdateLoop = 1;
+      if (m_bDurationThreadBusy)
+      {
+        LogDebug("CTsReaderFilter:: DurationThread -> idle");
+      }
+      m_bDurationThreadBusy = false;
       continue;
+    }
+    else
+    {   
+      if (!m_bDurationThreadBusy)
+      {
+        LogDebug("CTsReaderFilter:: DurationThread -> busy");
+      }
+      m_bDurationThreadBusy = true;
     }
 
     timeNow = GET_TIME_NOW();
@@ -1420,7 +1600,7 @@ void CTsReaderFilter::ThreadProc()
     }
 
     //Buffer underrun handling for timeshifting
-    if (m_State != State_Running)
+    if (State() != State_Running)
     {
       lastDataLowTime = timeNow;
       _InterlockedAnd(&m_demultiplexer.m_AVDataLowCount, 0);
@@ -1455,7 +1635,7 @@ void CTsReaderFilter::ThreadProc()
     
  
     //Update stream position - minimum 50ms between updates
-    if ((m_State != State_Stopped) && (((timeNow - 50) > lastPosnTime) || m_bForcePosnUpdate))
+    if ((State() != State_Stopped) && (((timeNow - 50) > lastPosnTime) || m_bForcePosnUpdate))
     {      
       lastPosnTime = timeNow;
       IMediaSeeking * ptrMediaPos = NULL;
@@ -1475,187 +1655,190 @@ void CTsReaderFilter::ThreadProc()
       }
     }
      
-    //Execute this loop approx every second
-    if (((timeNow - 1000) > lastDurTime) && IsFilterRunning())
-    {
-      lastDurTime = timeNow;
-      //are we playing an RTSP stream?
-      if (m_fileDuration!=NULL)
+    { //Context for CAutoLock
+      CAutoLock lock (&m_DurationThreadLock);
+      //Execute this loop approx every second
+      if (IsFilterRunning() && (State() != State_Stopped) && ((timeNow - 1000) > lastDurTime) )
       {
-        if (m_bTimeShifting)
+        lastDurTime = timeNow;
+        //are we playing an RTSP stream?
+        if (m_fileDuration!=NULL)
         {
-          isLiveCount = 2;
-        }      
-        //no, then get the duration from the local file
-        if (m_bStreamCompensated) //Normal play started
-        {          
-          if((durationUpdateLoop == 2) || m_bRecording || (m_State==State_Paused))
+          if (m_bTimeShifting)
           {
-            CTsDuration duration;
-            duration.SetFileReader(m_fileDuration);
-            duration.SetVideoPid(m_duration.GetPid());
-            duration.UpdateDuration(false);
-            m_bRecording = false;
-               
-            //did we find a duration?
-            if (duration.Duration().Millisecs()>0)
+            isLiveCount = 2;
+          }      
+          //no, then get the duration from the local file
+          if (m_bStreamCompensated) //Normal play started
+          {          
+            if((durationUpdateLoop == 2) || m_bRecording || (State()==State_Paused))
             {
-              if (duration.GetPid() > 0) //in case the PCR pid has changed
+              CTsDuration duration;
+              duration.SetFileReader(m_fileDuration);
+              duration.SetVideoPid(m_duration.GetPid());
+              duration.UpdateDuration(false);
+              m_bRecording = false;
+                 
+              //did we find a duration?
+              if (duration.Duration().Millisecs()>0)
               {
-                m_duration.SetVideoPid(duration.GetPid());
-              }
-
-              //yes, is it different then the one we determined last time?
-              if (duration.StartPcr().PcrReferenceBase!=pcrStartLast.PcrReferenceBase ||
-                  duration.EndPcr().PcrReferenceBase!=pcrEndLast.PcrReferenceBase)
-              {
-                //yes, then update it - we must be timeshifting or playing an in-progress recording
-                m_duration.Set(duration.StartPcr(), duration.EndPcr(), duration.MaxPcr());  // Local file
-                isLiveCount = 2;
-      
-                // Is graph running?
-                if (m_State != State_Stopped)
+                if (duration.GetPid() > 0) //in case the PCR pid has changed
                 {
-                  //yes, then send a EC_LENGTH_CHANGED event to the graph
-                  NotifyEvent(EC_LENGTH_CHANGED, NULL, NULL);
-                  SetDuration();
-                  // double endr = duration.EndPcr().ToClock() ; 
-                  // LogDebug("CTsReaderFilter::Duration, real end = %f", (float)endr);
+                  m_duration.SetVideoPid(duration.GetPid());
                 }
+  
+                //yes, is it different then the one we determined last time?
+                if (duration.StartPcr().PcrReferenceBase!=pcrStartLast.PcrReferenceBase ||
+                    duration.EndPcr().PcrReferenceBase!=pcrEndLast.PcrReferenceBase)
+                {
+                  //yes, then update it - we must be timeshifting or playing an in-progress recording
+                  m_duration.Set(duration.StartPcr(), duration.EndPcr(), duration.MaxPcr());  // Local file
+                  isLiveCount = 2;
+        
+                  // Is graph running?
+                  if (State() != State_Stopped)
+                  {
+                    //yes, then send a EC_LENGTH_CHANGED event to the graph
+                    NotifyEvent(EC_LENGTH_CHANGED, NULL, NULL);
+                    SetDuration();
+                    // double endr = duration.EndPcr().ToClock() ; 
+                    // LogDebug("CTsReaderFilter::Duration, real end = %f", (float)endr);
+                  }
+                }
+                else if (isLiveCount > 0)
+                {
+                  isLiveCount--;
+                }
+  
+                lastDurUpdate = GET_TIME_NOW();
+                pcrEndLast = duration.EndPcr();
+                pcrStartLast = duration.StartPcr();             
               }
-              else if (isLiveCount > 0)
+              else
               {
-                isLiveCount--;
+                lastDurUpdate = 0;
+                m_bRecording = true; //We missed an update - force update next time
+                // LogDebug("CTsReaderFilter::Duration, Update missed");
               }
-
-              lastDurUpdate = GET_TIME_NOW();
-              pcrEndLast = duration.EndPcr();
-              pcrStartLast = duration.StartPcr();             
+              
+            }
+            else if (isLiveCount > 0 && lastDurUpdate > 0) // Live file - use prediction between actual file duration updates
+            {           
+              CPcr pcrStart, pcrEnd, pcrMax ;
+              double start = pcrStartLast.ToClock() ;
+              double end = pcrEndLast.ToClock() ; 
+  
+              end += min(3.5, ((double)(GET_TIME_NOW() - lastDurUpdate)/1000.0));
+              
+              //set the duration
+              pcrStart.FromClock(start) ;
+              pcrEnd.FromClock(end);
+              m_duration.Set( pcrStart, pcrEnd, pcrMax); // Continuous update
+    
+              // Is graph running?
+              if (State() != State_Stopped)
+              {
+                //yes, then send a EC_LENGTH_CHANGED event to the graph
+                NotifyEvent(EC_LENGTH_CHANGED, NULL, NULL);
+                SetDuration();
+                // LogDebug("CTsReaderFilter::Duration, predicted end = %f", (float)end);
+              }
+            }
+            
+            if (m_bLiveTv && (State() == State_Paused))
+            {
+              // After 10 secs Pause, for sure, liveTv is cancelled.
+              PauseDuration++ ;
+              if (PauseDuration > 10)
+              {
+                m_bLiveTv=false;
+                LogDebug("CTsReaderFilter, Live Tv is paused for more than 10 secs => m_bLiveTv=false.");
+              }
             }
             else
             {
-              lastDurUpdate = 0;
-              m_bRecording = true; //We missed an update - force update next time
-              // LogDebug("CTsReaderFilter::Duration, Update missed");
-            }
-            
-          }
-          else if (isLiveCount > 0 && lastDurUpdate > 0) // Live file - use prediction between actual file duration updates
-          {           
-            CPcr pcrStart, pcrEnd, pcrMax ;
-            double start = pcrStartLast.ToClock() ;
-            double end = pcrEndLast.ToClock() ; 
-
-            end += min(3.5, ((double)(GET_TIME_NOW() - lastDurUpdate)/1000.0));
-            
-            //set the duration
-            pcrStart.FromClock(start) ;
-            pcrEnd.FromClock(end);
-            m_duration.Set( pcrStart, pcrEnd, pcrMax); // Continuous update
-  
-            // Is graph running?
-            if (m_State != State_Stopped)
-            {
-              //yes, then send a EC_LENGTH_CHANGED event to the graph
-              NotifyEvent(EC_LENGTH_CHANGED, NULL, NULL);
-              SetDuration();
-              // LogDebug("CTsReaderFilter::Duration, predicted end = %f", (float)end);
-            }
-          }
-          
-          if (m_bLiveTv && (m_State == State_Paused))
-          {
-            // After 10 secs Pause, for sure, liveTv is cancelled.
-            PauseDuration++ ;
-            if (PauseDuration > 10)
-            {
-              m_bLiveTv=false;
-              LogDebug("CTsReaderFilter, Live Tv is paused for more than 10 secs => m_bLiveTv=false.");
+              PauseDuration=0 ;
             }
           }
           else
           {
-            PauseDuration=0 ;
+            m_bRecording = true; //Force duration update next time m_bStreamCompensated is true
+            lastDurUpdate = 0;
           }
         }
         else
         {
-          m_bRecording = true; //Force duration update next time m_bStreamCompensated is true
-          lastDurUpdate = 0;
-        }
-      }
-      else
-      {
-        // we are not playing a local file
-        // we are playing a (RTSP) stream?
-        if(m_bTimeShifting || m_bRecording)
-        {
-          if(durationUpdateLoop == 0)
+          // we are not playing a local file
+          // we are playing a (RTSP) stream?
+          if(m_bTimeShifting || m_bRecording)
           {
-          	Old_rtspDuration = m_rtspClient.Duration();
-            m_rtspClient.UpdateDuration();
-          }
-    	
-          CPcr pcrStart, pcrEnd, pcrMax ;
-          double duration = m_rtspClient.Duration() / 1000.0f ;
-          double start = m_duration.StartPcr().ToClock() ;
-          double end = m_duration.EndPcr().ToClock() ; 
-          
-      	  if (m_bTimeShifting)
-          {
-            // EndPcr is continuously increasing ( until ~26 hours for rollover that will fail ! )
-            // So, we refer duration to End, and just update start.
-            end = (double)(GET_TIME_NOW()-m_tickCount)/1000.0 ;
             if(durationUpdateLoop == 0)
             {
-              start  = end - duration;
-              if (start<0) start=0 ;
+            	Old_rtspDuration = m_rtspClient.Duration();
+              m_rtspClient.UpdateDuration();
             }
-  				}
-  				else
-  				{
-            end = start + duration ;
-  					if (Old_rtspDuration!=m_rtspClient.Duration())  // recording alive, continue to increase every second.
-  					{
-              end += (double)(durationUpdateLoop % 4) ;
-  					}
-            else
+      	
+            CPcr pcrStart, pcrEnd, pcrMax ;
+            double duration = m_rtspClient.Duration() / 1000.0f ;
+            double start = m_duration.StartPcr().ToClock() ;
+            double end = m_duration.EndPcr().ToClock() ; 
+            
+        	  if (m_bTimeShifting)
             {
-              m_bRecording = false;
+              // EndPcr is continuously increasing ( until ~26 hours for rollover that will fail ! )
+              // So, we refer duration to End, and just update start.
+              end = (double)(GET_TIME_NOW()-m_tickCount)/1000.0 ;
+              if(durationUpdateLoop == 0)
+              {
+                start  = end - duration;
+                if (start<0) start=0 ;
+              }
+    				}
+    				else
+    				{
+              end = start + duration ;
+    					if (Old_rtspDuration!=m_rtspClient.Duration())  // recording alive, continue to increase every second.
+    					{
+                end += (double)(durationUpdateLoop % 4) ;
+    					}
+              else
+              {
+                m_bRecording = false;
+              }
+    				}           
+            //set the duration
+            pcrStart.FromClock(start) ;
+            pcrEnd.FromClock(end);
+            m_duration.Set( pcrStart, pcrEnd, pcrMax);          // Continuous update
+    
+    //          LogDebug("Start : %f, End : %f",(float)m_duration.StartPcr().ToClock(),(float)m_duration.EndPcr().ToClock()) ;
+    
+            // Is graph running?
+            if (State() == State_Running)
+            {
+              //yes, then send a EC_LENGTH_CHANGED event to the graph
+              NotifyEvent(EC_LENGTH_CHANGED, NULL, NULL);
+              SetDuration();
             }
-  				}           
-          //set the duration
-          pcrStart.FromClock(start) ;
-          pcrEnd.FromClock(end);
-          m_duration.Set( pcrStart, pcrEnd, pcrMax);          // Continuous update
-  
-  //          LogDebug("Start : %f, End : %f",(float)m_duration.StartPcr().ToClock(),(float)m_duration.EndPcr().ToClock()) ;
-  
-          // Is graph running?
-          if (m_State == State_Running)
-          {
-            //yes, then send a EC_LENGTH_CHANGED event to the graph
-            NotifyEvent(EC_LENGTH_CHANGED, NULL, NULL);
-            SetDuration();
           }
         }
-      }
-      
-      durationUpdateLoop = (durationUpdateLoop + 1) % 4;
-      
-      if (durationUpdateLoop==0)
-      {
-        CRefTime firstAudio, lastAudio;
-        CRefTime firstVideo, lastVideo;
-        int cntA = m_demultiplexer.GetAudioBufferPts(firstAudio, lastAudio);
-        int cntV = m_demultiplexer.GetVideoBufferPts(firstVideo, lastVideo);
-                
-        if ((cntA > 100) || (cntV > 100))
+        
+        durationUpdateLoop = (durationUpdateLoop + 1) % 4;
+        
+        if (durationUpdateLoop==0)
         {
-          LogDebug("Buffers : A/V = %d/%d, A last : %03.3f, V Last : %03.3f", cntA, cntV, (float)lastAudio.Millisecs()/1000.0f, (float)lastVideo.Millisecs()/1000.0f);
+          CRefTime firstAudio, lastAudio;
+          CRefTime firstVideo, lastVideo;
+          int cntA = m_demultiplexer.GetAudioBufferPts(firstAudio, lastAudio);
+          int cntV = m_demultiplexer.GetVideoBufferPts(firstVideo, lastVideo);
+                  
+          if ((cntA > 300) || (cntV > 300) || m_bEnableBufferLogging)
+          {
+            LogDebug("Buffers : A/V = %d/%d, A last : %03.3f, V Last : %03.3f", cntA, cntV, (float)lastAudio.Millisecs()/1000.0f, (float)lastVideo.Millisecs()/1000.0f);
+          }
         }
+                          
       }
-                        
     }
     
     Sleep(1);

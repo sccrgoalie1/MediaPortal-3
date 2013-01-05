@@ -219,6 +219,8 @@ private:
   CPcr     m_lastAudioPTS;
   double   m_minVideoPTSdiff;
   double   m_minVideoDTSdiff;
+  int      m_vidPTScount;
+  int      m_vidDTScount;
   bool     m_bLogFPSfromDTSPTS;
   CTsDuration& m_duration;
   CTsReaderFilter& m_filter;
@@ -241,7 +243,6 @@ private:
   DWORD m_WaitNewPatTmo;
   DWORD m_WaitGoodPatTmo;
   bool m_bWaitGoodPat;
-  int m_receivedPackets;
 
   bool m_bFirstGopFound;
   bool m_bSecondGopFound;
@@ -295,4 +296,7 @@ private:
   
   bool m_isNewNALUTimestamp;
   bool m_bVideoPTSroff;
+  
+  int  m_initialAudioSamples;
+  int  m_initialVideoSamples;
 };

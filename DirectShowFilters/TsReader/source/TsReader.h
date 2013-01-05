@@ -233,6 +233,7 @@ public:
   bool            m_bStreamCompensated;
   CRefTime        m_ClockOnStart;
   bool            m_bForcePosnUpdate;
+  bool            m_bDurationThreadBusy;
 
   REFERENCE_TIME  m_RandomCompensation;
   REFERENCE_TIME  m_MediaPos;
@@ -263,6 +264,8 @@ public:
   bool            m_bDisableAddPMT;
   bool            m_bForceFFDShowSyncFix;
   bool            m_bUseFPSfromDTSPTS;
+  LONG            m_regInitialBuffDelay;
+  bool            m_bEnableBufferLogging;
 
   CLSID           GetCLSIDFromPin(IPin* pPin);
   HRESULT         GetSubInfoFromPin(IPin* pPin);
@@ -275,6 +278,7 @@ public:
   
   CLSID           m_subtitleCLSID;
   void            ReleaseSubtitleFilter();
+  CCritSec        m_ReadAheadLock;
 
 protected:
   void ThreadProc();
@@ -296,6 +300,7 @@ private:
   CCritSec        m_CritSecDuration;
   CCritSec        m_GetTimeLock;
   CCritSec        m_GetCompLock;
+  CCritSec        m_DurationThreadLock;
   FileReader*     m_fileReader;
   FileReader*     m_fileDuration;
   CTsDuration     m_duration;

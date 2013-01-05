@@ -788,15 +788,25 @@ HRESULT CVideoPin::ChangeStop()
 }
 HRESULT CVideoPin::ChangeRate()
 {
+  CDeMultiplexer& demux = m_pTsReaderFilter->GetDemultiplexer();
+
   if( m_dRateSeeking <= 0 )
   {
     m_dRateSeeking = 1.0;  // Reset to a reasonable value.
     return E_FAIL;
   }
-  if( m_dRateSeeking > 2.0 && (m_pTsReaderFilter->m_videoDecoderCLSID == CLSID_FFDSHOWVIDEO 
-                                || m_pTsReaderFilter->m_videoDecoderCLSID == CLSID_LAVVIDEO))
+  
+  if( m_dRateSeeking > 4.0 && 
+     ((demux.GetVideoServiceType()==SERVICE_TYPE_VIDEO_H264) || 
+      (demux.GetVideoServiceType()==SERVICE_TYPE_VIDEO_MPEG4)) )
   {
-    //FFDShow video decoder doesn't handle rate > 2.0 properly
+    m_dRateSeeking = 1.0;  // Reset to a reasonable value.
+    return E_FAIL;
+  }
+  
+  if( m_dRateSeeking > 2.0 && (m_pTsReaderFilter->m_videoDecoderCLSID == CLSID_FFDSHOWVIDEO))
+  {
+    //Some video decoders don't handle higher rates properly
     m_dRateSeeking = 1.0;  // Reset to a reasonable value.
     return E_FAIL;
   }
