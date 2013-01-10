@@ -94,7 +94,7 @@ HRESULT CSubtitlePin::CheckMediaType(const CMediaType* pmt)
 
   CDeMultiplexer& demux=m_pTsReaderFilter->GetDemultiplexer();
   
-  if (!m_pTsReaderFilter->CheckCallback())
+  if (!m_pTsReaderFilter->CheckCallback() && !m_pTsReaderFilter->m_bSubPinConnectAlways)
   {
     //LogDebug("subPin: Not running in MP - CheckMediaType() fail");
     return E_FAIL;
@@ -132,7 +132,7 @@ HRESULT CSubtitlePin::GetMediaType(CMediaType *pmt)
 
   //LogDebug("subPin:GetMediaType()");
 
-  if (!m_pTsReaderFilter->CheckCallback())
+  if (!m_pTsReaderFilter->CheckCallback() && !m_pTsReaderFilter->m_bSubPinConnectAlways)
   {
     //LogDebug("sub pin: Not running in MP - GetMediaType() fail");
     //Return a null media type
@@ -199,7 +199,7 @@ HRESULT CSubtitlePin::CheckConnect(IPin *pReceivePin)
   HRESULT hr;
   PIN_INFO pinInfo;
   
-  if (!m_pTsReaderFilter->CheckCallback())
+  if (!m_pTsReaderFilter->CheckCallback() && !m_pTsReaderFilter->m_bSubPinConnectAlways)
   {
     //LogDebug("sub pin: Not running in MP - CheckConnect() fail");
     return E_FAIL;
@@ -232,7 +232,7 @@ HRESULT CSubtitlePin::CompleteConnect(IPin *pReceivePin)
 {
   m_bInFillBuffer=false;
   
-  if (!m_pTsReaderFilter->CheckCallback())
+  if (!m_pTsReaderFilter->CheckCallback() && !m_pTsReaderFilter->m_bSubPinConnectAlways)
   {
     LogDebug("sub pin: Not running in MP - CompleteConnect() fail");
     return E_FAIL;

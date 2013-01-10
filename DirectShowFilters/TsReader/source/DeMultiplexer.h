@@ -222,6 +222,7 @@ private:
   int      m_vidPTScount;
   int      m_vidDTScount;
   bool     m_bLogFPSfromDTSPTS;
+  bool     m_bUsingGOPtimestamp;
   CTsDuration& m_duration;
   CTsReaderFilter& m_filter;
   unsigned int m_iAudioStream;
@@ -275,7 +276,7 @@ private:
   CPcr m_VideoPts;
   CPcr m_CurrentVideoPts;
   bool m_bInBlock;
-  double m_curFrameRate;
+  double m_curFramePeriod;
   int m_LastValidFrameCount;
   CPcr m_LastValidFramePts;
 

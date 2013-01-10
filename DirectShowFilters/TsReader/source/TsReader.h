@@ -266,6 +266,7 @@ public:
   bool            m_bUseFPSfromDTSPTS;
   LONG            m_regInitialBuffDelay;
   bool            m_bEnableBufferLogging;
+  bool            m_bSubPinConnectAlways;
 
   CLSID           GetCLSIDFromPin(IPin* pPin);
   HRESULT         GetSubInfoFromPin(IPin* pPin);

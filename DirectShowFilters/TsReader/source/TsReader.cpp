@@ -48,64 +48,9 @@
 // For more details for memory leak detection see the alloctracing.h header
 #include "..\..\alloctracing.h"
 
-//static char logFile[MAX_PATH];
-//static WORD logFileParsed = -1;
-
 DWORD m_tGTStartTime = 0;
 
 DEFINE_MP_DEBUG_SETTING(DoNotAllowSlowMotionDuringZapping)
-
-//void GetLogFile(char *pLog)
-//{
-//  SYSTEMTIME systemTime;
-//  GetLocalTime(&systemTime);
-//  if(logFileParsed != systemTime.wDay)
-//  {
-//    TCHAR folder[MAX_PATH];
-//    ::SHGetSpecialFolderPath(NULL,folder,CSIDL_COMMON_APPDATA,FALSE);
-//    sprintf(logFile,"%s\\Team MediaPortal\\MediaPortal\\Log\\TsReader-%04.4d-%02.2d-%02.2d.Log",folder, systemTime.wYear, systemTime.wMonth, systemTime.wDay);
-//    logFileParsed=systemTime.wDay; // rec
-//  }
-//  strcpy(pLog, &logFile[0]);
-//}
-//
-//
-//void LogDebug(const char *fmt, ...)
-//{
-//  va_list ap;
-//  va_start(ap,fmt);
-//
-//  char buffer[1000];
-//  int tmp;
-//  va_start(ap,fmt);
-//  tmp=vsprintf(buffer, fmt, ap);
-//  va_end(ap);
-//  SYSTEMTIME systemTime;
-//  GetLocalTime(&systemTime);
-//
-////#ifdef DONTLOG
-//  TCHAR filename[1024];
-//  GetLogFile(filename);
-//  FILE* fp = fopen(filename,"a+");
-//
-//  if (fp!=NULL)
-//  {
-//    fprintf(fp,"%02.2d-%02.2d-%04.4d %02.2d:%02.2d:%02.2d.%03.3d [%x]%s\n",
-//      systemTime.wDay, systemTime.wMonth, systemTime.wYear,
-//      systemTime.wHour,systemTime.wMinute,systemTime.wSecond,
-//      systemTime.wMilliseconds,
-//      GetCurrentThreadId(),
-//      buffer);
-//    fclose(fp);
-//  }
-////#endif
-//  char buf[1000];
-//  sprintf(buf,"%02.2d-%02.2d-%04.4d %02.2d:%02.2d:%02.2d %s\n",
-//    systemTime.wDay, systemTime.wMonth, systemTime.wYear,
-//    systemTime.wHour,systemTime.wMinute,systemTime.wSecond,
-//    buffer);
-//  //::OutputDebugString(buf);
-//};
 
 //-------------------- Async logging methods -------------------------------------------------
 
@@ -343,6 +288,7 @@ CTsReaderFilter::CTsReaderFilter(IUnknown *pUnk, HRESULT *phr):
   m_bUseFPSfromDTSPTS = true;
   m_regInitialBuffDelay = INITIAL_BUFF_DELAY;
   m_bEnableBufferLogging = false;
+  m_bSubPinConnectAlways = false;
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\Team MediaPortal\\TsReader", 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
   {
@@ -416,6 +362,15 @@ CTsReaderFilter::CTsReaderFilter(IUnknown *pUnk, HRESULT *phr):
     {
       LogDebug("----- EnableBufferLogging -----");
       m_bEnableBufferLogging = true;
+    }
+
+    keyValue = 0;
+    LPCTSTR subConnectAlways = TEXT("SubPinConnectAlways");
+    ReadRegistryKeyDword(key, subConnectAlways, keyValue);
+    if (keyValue)
+    {
+      LogDebug("----- SubPinConnectAlways -----");
+      m_bSubPinConnectAlways = true;
     }
 
     RegCloseKey(key);
