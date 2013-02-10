@@ -280,6 +280,7 @@ public:
   CLSID           m_subtitleCLSID;
   void            ReleaseSubtitleFilter();
   CCritSec        m_ReadAheadLock;
+  
 
 protected:
   void ThreadProc();

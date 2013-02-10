@@ -57,7 +57,8 @@ DEFINE_MP_DEBUG_SETTING(DoNotAllowSlowMotionDuringZapping)
 CCritSec m_qLock;
 CCritSec m_logFileLock;
 std::queue<std::string> m_logQueue;
-BOOL m_bLoggerRunning;
+BOOL m_bLoggerRunning = false;
+BOOL m_bLogsRotated = false;
 HANDLE m_hLogger = NULL;
 CAMEvent m_EndLoggingEvent;
 
@@ -70,14 +71,18 @@ void LogPath(TCHAR* dest, TCHAR* name)
 
 
 void LogRotate()
-{
+{   
   CAutoLock lock(&m_logFileLock);
+  if (m_bLogsRotated) 
+    return;
+    
   TCHAR fileName[MAX_PATH];
   LogPath(fileName, _T("log"));
   TCHAR bakFileName[MAX_PATH];
   LogPath(bakFileName, _T("bak"));
   _tremove(bakFileName);
   _trename(fileName, bakFileName);
+  m_bLogsRotated = true;
 }
 
 
@@ -116,10 +121,22 @@ UINT CALLBACK LogThread(void* param)
         }
         fclose(fp);
       }
+      else //discard data
+      {
+        string line = GetLogLine();
+        while (!line.empty())
+        {
+          line = GetLogLine();
+        }
+      }
     }
     if (m_bLoggerRunning)
     {
       m_EndLoggingEvent.Wait(1000); //Sleep for 1000ms, unless thread is ending
+    }
+    else
+    {
+      Sleep(1);
     }
   }
   return 0;
@@ -256,7 +273,7 @@ CTsReaderFilter::CTsReaderFilter(IUnknown *pUnk, HRESULT *phr):
 //  GetLogFile(filename);
 //  ::DeleteFile(filename);
 
-//  LogRotate();
+  LogRotate();
 
   LogDebug("----- Experimental noStopMod version -----");
   LogDebug("---------- v0.0.%d XXX -------------------", TSREADER_VERSION);
