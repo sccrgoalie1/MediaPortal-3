@@ -545,6 +545,7 @@ void CDeMultiplexer::FlushVideo()
   m_WaitHeaderPES=-1 ;
   m_bVideoAtEof=false;
   m_MinVideoDelta = 10.0 ;
+  m_LastVideoDelta = 10.0 ;
   _InterlockedAnd(&m_AVDataLowCount, 0) ;
   m_filter.m_bRenderingClockTooFast=false ;
   m_bSetVideoDiscontinuity=true;
@@ -583,6 +584,7 @@ void CDeMultiplexer::FlushAudio()
   m_pCurrentAudioBuffer = new CBuffer();
   m_bAudioAtEof = false;
   m_MinAudioDelta = 10.0;
+  m_LastAudioDelta = 10.0;
   _InterlockedAnd(&m_AVDataLowCount, 0);
   m_filter.m_bRenderingClockTooFast=false;
   m_bSetAudioDiscontinuity=true;
@@ -1337,6 +1339,7 @@ void CDeMultiplexer::FillAudio(CTsHeader& header, byte* tsPacket)
           if (m_filter.m_bStreamCompensated && m_bAudioAtEof && !m_filter.m_bRenderingClockTooFast)
           {
             float Delta = pts.ToClock()-(float)((double)(m_filter.Compensation.m_time+MediaTime)/10000000.0) ;
+            m_LastAudioDelta = Delta;
             if (Delta < m_MinAudioDelta)
             {
               m_MinAudioDelta=Delta;
@@ -1910,6 +1913,7 @@ void CDeMultiplexer::FillVideoH264(CTsHeader& header, byte* tsPacket)
             if (m_filter.m_bStreamCompensated && m_bVideoAtEof && !m_filter.m_bRenderingClockTooFast)
             {
               float Delta = (float)((double)Ref.Millisecs()/1000.0)-(float)((double)(m_filter.Compensation.m_time+MediaTime)/10000000.0) ;
+              m_LastVideoDelta = Delta;
               if (Delta < m_MinVideoDelta)
               {
                 m_MinVideoDelta=Delta;
@@ -2385,6 +2389,7 @@ void CDeMultiplexer::FillVideoMPEG2(CTsHeader& header, byte* tsPacket)
               if (m_filter.m_bStreamCompensated && m_bVideoAtEof && !m_filter.m_bRenderingClockTooFast)
               {
                 float Delta = (float)((double)Ref.Millisecs()/1000.0)-(float)((double)(m_filter.Compensation.m_time+MediaTime)/10000000.0) ;
+                m_LastVideoDelta = Delta;
                 if (Delta < m_MinVideoDelta)
                 {
                   m_MinVideoDelta=Delta;

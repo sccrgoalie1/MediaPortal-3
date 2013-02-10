@@ -512,6 +512,10 @@ STDMETHODIMP CTsReaderFilter::NonDelegatingQueryInterface(REFIID riid, void ** p
   {
     return GetInterface((IAudioStream*)this, ppv);
   }
+  if ( riid == IID_ITSRStatus )
+  {
+    return GetInterface((ITSRStatus*)this, ppv);
+  }
   return CSource::NonDelegatingQueryInterface(riid, ppv);
 }
 
@@ -2287,6 +2291,28 @@ void CTsReaderFilter::CheckForMPAR()
     m_bMPARinGraph = false;
     LogDebug("MPAR not found");
   }
+}
+
+// ITSRStatus interface implementation
+
+HRESULT CTsReaderFilter::GetStatusData(STATUSDATA *pStatusData)
+{
+  CheckPointer(pStatusData, E_POINTER);
+  LogDebug("ITSRStatus - GetStatusData called");
+
+  int ACnt, VCnt;
+  m_demultiplexer.GetBufferCounts(&ACnt, &VCnt);
+
+  pStatusData->videoBuffCount = VCnt;
+  pStatusData->audioBuffCount = ACnt;
+  pStatusData->videoDelta = m_demultiplexer.m_LastVideoDelta;
+  pStatusData->audioDelta = m_demultiplexer.m_LastAudioDelta;
+  pStatusData->isLiveTV = m_bLiveTv;
+  pStatusData->controlMPAR = false;
+  pStatusData->MPARBias = 1.0;
+  pStatusData->MPARAdjustment = 0.0;
+  
+  return S_OK;
 }
 
 ////////////////////////////////////////////////////////////////////////

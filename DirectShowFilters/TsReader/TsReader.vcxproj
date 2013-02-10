@@ -204,6 +204,7 @@
     <ClInclude Include="source\IAudioStream.h" />
     <ClInclude Include="source\ISubtitleStream.h" />
     <ClInclude Include="source\ITeletextSource.h" />
+    <ClInclude Include="source\ITSRStatus.h" />
     <ClInclude Include="source\MediaSeeking.h" />
     <ClInclude Include="source\MemoryBuffer.h" />
     <ClInclude Include="source\MemoryReader.h" />

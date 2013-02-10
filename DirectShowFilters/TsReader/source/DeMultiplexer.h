@@ -159,6 +159,9 @@ public:
   long m_AVDataLowCount;
   DWORD m_targetAVready;
   bool  m_bSubtitleCompensationSet;
+  
+  float m_LastAudioDelta;
+  float m_LastVideoDelta;
 
 private:
   struct stAudioStream
