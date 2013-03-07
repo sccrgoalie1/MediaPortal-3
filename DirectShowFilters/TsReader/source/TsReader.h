@@ -32,6 +32,7 @@
 #include "IAudioStream.h"
 #include "ITeletextSource.h"
 #include "ITSRStatus.h"
+#include "IAVSyncClock.h"
 #include <map>
 
 #define AUDIO_CHANGE 0x1
@@ -46,6 +47,7 @@
 #define INITIAL_BUFF_DELAY 0      // ms units
 #define AV_READY_DELAY 0     // ms units
 #define PRESENT_DELAY (300*10000) // hns units - timestamp compensation offset
+#define AUDIO_STALL_POINT 0.8     // in seconds
 
 using namespace std;
 
@@ -192,8 +194,9 @@ public:
   void STDMETHODCALLTYPE  OnGraphRebuild(int info);
   void STDMETHODCALLTYPE  SetMediaPosition(REFERENCE_TIME MediaPos);
   
-  //HRESULT STDMETHOD GetStatusData(STATUSDATA *pStatusData);
   STDMETHOD(GetStatusData)(STATUSDATA* pStatusData);
+  STDMETHOD(AdjustClock)(DOUBLE adjustment);
+  STDMETHOD(SetBias)(DOUBLE bias);
 	
   // IFileSourceFilter
   STDMETHODIMP    Load(LPCOLESTR pszFileName,const AM_MEDIA_TYPE *pmt);
@@ -202,7 +205,7 @@ public:
   double          GetStartTime();
   bool            IsFilterRunning();
   CDeMultiplexer& GetDemultiplexer();
-  void            Seek(CRefTime&  seekTime, bool seekInFile);
+  bool            Seek(CRefTime&  seekTime);
 //  void            SeekDone(CRefTime& refTime);
 //  void            SeekStart();
   HRESULT         SeekPreStart(CRefTime& rtSeek);
@@ -235,6 +238,7 @@ public:
   bool            IsWaitDataAfterSeek();
 
   DWORD           m_lastPause;
+  DWORD           m_lastRun;
   bool            m_bStreamCompensated;
   CRefTime        m_ClockOnStart;
   bool            m_bForcePosnUpdate;
@@ -285,7 +289,10 @@ public:
   CLSID           m_subtitleCLSID;
   void            ReleaseSubtitleFilter();
   CCritSec        m_ReadAheadLock;
+  void            ReleaseAVSyncClockInterface();  
   
+  float          m_LastAudioPinDelta;
+  float          m_LastVideoPinDelta;
 
 protected:
   void ThreadProc();
@@ -298,6 +305,9 @@ private:
   void    BufferingPause(bool longPause);
   void    ReadRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, DWORD& data);
   void    WriteRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, DWORD& data);
+  void    GetAVSyncClockInterface();
+  HRESULT SetMPARBiasFromTsR();
+  HRESULT AdjustClockMPARfromTsR(DOUBLE adjustment);
     
   CAudioPin*	    m_pAudioPin;
   CVideoPin*	    m_pVideoPin;
@@ -325,6 +335,17 @@ private:
   IDVBSubtitle*   m_pDVBSubtitle;
   ITSReaderCallback* m_pCallback;
   ITSReaderAudioChange* m_pRequestAudioCallback;
+  
+  IAVSyncClock*   m_pAVSyncClock;
+  double          m_dBiasMultiplier;
+  CCritSec        m_sectionMPAR;
+  int             m_MPARcontrolLevel;
+  double          m_dAudToPresDeltaRef;
+  bool            m_bAudToPresMDInit;
+  unsigned int    m_iClockAdjustmentsDone;
+  double          m_dBiasFromEVR;
+  bool            m_bControlMPAR;
+  bool            m_bEVRhasConnected;
 
   bool            m_bAnalog;
   bool            m_bStoppedForUnexpectedSeek ;

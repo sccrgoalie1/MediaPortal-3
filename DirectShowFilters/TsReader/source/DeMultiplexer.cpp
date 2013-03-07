@@ -545,7 +545,6 @@ void CDeMultiplexer::FlushVideo()
   m_WaitHeaderPES=-1 ;
   m_bVideoAtEof=false;
   m_MinVideoDelta = 10.0 ;
-  m_LastVideoDelta = 10.0 ;
   _InterlockedAnd(&m_AVDataLowCount, 0) ;
   m_filter.m_bRenderingClockTooFast=false ;
   m_bSetVideoDiscontinuity=true;
@@ -584,11 +583,12 @@ void CDeMultiplexer::FlushAudio()
   m_pCurrentAudioBuffer = new CBuffer();
   m_bAudioAtEof = false;
   m_MinAudioDelta = 10.0;
-  m_LastAudioDelta = 10.0;
   _InterlockedAnd(&m_AVDataLowCount, 0);
   m_filter.m_bRenderingClockTooFast=false;
   m_bSetAudioDiscontinuity=true;
   m_bAudioSampleLate=false;
+
+  ClearAverageAudDelta();
   
   Reset();  // PacketSync reset.
 }
@@ -709,7 +709,7 @@ CBuffer* CDeMultiplexer::GetVideo(bool earlyStall)
     return NULL;
   }
 
-  if (CheckPrefetchState(!earlyStall, false))
+  if (CheckPrefetchState(true, false))
   {
     //Read some data
     m_bReadAheadFromFile = true;
@@ -762,7 +762,7 @@ CBuffer* CDeMultiplexer::GetAudio(bool earlyStall, CRefTime rtStartTime)
     return NULL;
   }
 
-  if (CheckPrefetchState(!earlyStall, false))
+  if (CheckPrefetchState(true, false))
   {
     //Read some data
     m_bReadAheadFromFile = true;
@@ -1308,65 +1308,36 @@ void CDeMultiplexer::FillAudio(CTsHeader& header, byte* tsPacket)
         
         if (CPcr::DecodeFromPesHeader(p,0,pts,dts))
         {
-          double diff;
-          if (!m_lastAudioPTS.IsValid)
-            m_lastAudioPTS=pts;
-          if (m_lastAudioPTS>pts)
-            diff=m_lastAudioPTS.ToClock()-pts.ToClock();
-          else
-            diff=pts.ToClock()-m_lastAudioPTS.ToClock();
-          if (diff>2.0)
+          double diff = 0.0;
+          if (pts.IsValid)
           {
-            //Large PTS jump - flush the world...
-            LogDebug("DeMultiplexer::FillAudio pts jump found : %f %f, %f", (float) diff, (float)pts.ToClock(), (float)m_lastAudioPTS.ToClock());
-            m_lastAudioPTS.IsValid=false;
-            m_lastVideoPTS.IsValid=false;
-            m_lastVideoDTS.IsValid=false;
-            m_bSetAudioDiscontinuity=true;
-            //Flushing is delegated to CDeMultiplexer::ThreadProc()
-            m_bFlushDelegated = true;
-            WakeThread();            
-          }
-          else
-          {
-            m_lastAudioPTS=pts;
-          }
-
-          Cbuf->SetPts(pts);
-          
-          REFERENCE_TIME MediaTime;
-          m_filter.GetMediaPosition(&MediaTime);
-          if (m_filter.m_bStreamCompensated && m_bAudioAtEof && !m_filter.m_bRenderingClockTooFast)
-          {
-            float Delta = pts.ToClock()-(float)((double)(m_filter.Compensation.m_time+MediaTime)/10000000.0) ;
-            m_LastAudioDelta = Delta;
-            if (Delta < m_MinAudioDelta)
+            if (!m_lastAudioPTS.IsValid)
+              m_lastAudioPTS=pts;
+            if (m_lastAudioPTS>pts)
+              diff=m_lastAudioPTS.ToClock()-pts.ToClock();
+            else
+              diff=pts.ToClock()-m_lastAudioPTS.ToClock();
+            if (diff>2.0)
             {
-              m_MinAudioDelta=Delta;
-              if (Delta < -2.0)
-              {
-                //Large negative delta - flush the world...
-                LogDebug("Demux : Audio to render too late= %03.3f Sec, flushing", Delta) ;
-                m_MinAudioDelta+=1.0;
-                m_MinVideoDelta+=1.0;                
-                //Flushing is delegated to CDeMultiplexer::ThreadProc()
-                m_bFlushDelegated = true;
-                WakeThread();            
-              }
-              else if (Delta < 0.1)
-              {
-                LogDebug("Demux : Audio to render too late= %03.3f Sec", Delta) ;
-                //  m_filter.m_bRenderingClockTooFast=true;
-                m_MinAudioDelta+=1.0;
-                m_MinVideoDelta+=1.0;                
-              }
-              else
-              {
-                LogDebug("Demux : Audio to render %03.3f Sec", Delta);
-              }
+              //Large PTS jump - flush the world...
+              LogDebug("DeMultiplexer::FillAudio pts jump found : %f %f, %f", (float) diff, (float)pts.ToClock(), (float)m_lastAudioPTS.ToClock());
+              m_lastAudioPTS.IsValid=false;
+              m_lastVideoPTS.IsValid=false;
+              m_lastVideoDTS.IsValid=false;
+              m_bSetAudioDiscontinuity=true;
+              //Flushing is delegated to CDeMultiplexer::ThreadProc()
+              m_bFlushDelegated = true;
+              WakeThread();            
             }
-          }
+            else
+            {
+              m_lastAudioPTS=pts;
+            }
+  
+            Cbuf->SetPts(pts);  
+          }        
         }
+        
         //skip pes header
         int headerLen=9+p[8] ;
         int len = Cbuf->Length()-headerLen;
@@ -1417,6 +1388,42 @@ void CDeMultiplexer::FillAudio(CTsHeader& header, byte* tsPacket)
             {
               if (Ref < m_FirstAudioSample) m_FirstAudioSample = Ref;
               if (Ref > m_LastAudioSample) m_LastAudioSample = Ref;
+
+              REFERENCE_TIME MediaTime;
+              m_filter.GetMediaPosition(&MediaTime);
+              double Delta = ((double)(Ref.m_time-m_filter.Compensation.m_time-MediaTime))/10000000.0 ;            
+              if (m_filter.m_bStreamCompensated && (m_filter.State() == State_Running))
+              {       
+                CalcAverageAudioDelta(Delta);
+              }
+              if (m_filter.m_bStreamCompensated && m_bAudioAtEof && !m_filter.m_bRenderingClockTooFast)
+              {
+                if (Delta < m_MinAudioDelta)
+                {
+                  m_MinAudioDelta=Delta;
+                  if (Delta < -2.0)
+                  {
+                    //Large negative delta - flush the world...
+                    LogDebug("Demux : Audio to render too late= %03.3f Sec, flushing", (float)Delta) ;
+                    m_MinAudioDelta+=1.0;
+                    m_MinVideoDelta+=1.0;                
+                    //Flushing is delegated to CDeMultiplexer::ThreadProc()
+                    m_bFlushDelegated = true;
+                    WakeThread();            
+                  }
+                  else if (Delta < 0.1)
+                  {
+                    LogDebug("Demux : Audio to render too late= %03.3f Sec", (float)Delta) ;
+                    //  m_filter.m_bRenderingClockTooFast=true;
+                    m_MinAudioDelta+=1.0;
+                    m_MinVideoDelta+=1.0;                
+                  }
+                  else
+                  {
+                    LogDebug("Demux : Audio to render %03.3f Sec", (float)Delta);
+                  }
+                }
+              }
             }
             
             m_vecAudioBuffers.push_back(*it);
@@ -1913,7 +1920,6 @@ void CDeMultiplexer::FillVideoH264(CTsHeader& header, byte* tsPacket)
             if (m_filter.m_bStreamCompensated && m_bVideoAtEof && !m_filter.m_bRenderingClockTooFast)
             {
               float Delta = (float)((double)Ref.Millisecs()/1000.0)-(float)((double)(m_filter.Compensation.m_time+MediaTime)/10000000.0) ;
-              m_LastVideoDelta = Delta;
               if (Delta < m_MinVideoDelta)
               {
                 m_MinVideoDelta=Delta;
@@ -2389,7 +2395,6 @@ void CDeMultiplexer::FillVideoMPEG2(CTsHeader& header, byte* tsPacket)
               if (m_filter.m_bStreamCompensated && m_bVideoAtEof && !m_filter.m_bRenderingClockTooFast)
               {
                 float Delta = (float)((double)Ref.Millisecs()/1000.0)-(float)((double)(m_filter.Compensation.m_time+MediaTime)/10000000.0) ;
-                m_LastVideoDelta = Delta;
                 if (Delta < m_MinVideoDelta)
                 {
                   m_MinVideoDelta=Delta;
@@ -2660,11 +2665,11 @@ bool CDeMultiplexer::CheckPrefetchState(bool isNormal, bool isForced)
   //Normal play
   if (isNormal)
   {
-    if (m_filter.GetAudioPin()->IsConnected() && (m_vecAudioBuffers.size() < m_initialAudioSamples))
+    if (m_filter.GetAudioPin()->IsConnected() && (m_vecAudioBuffers.size() < (4 + m_initialAudioSamples)))
     {
       return true;
     }
-    if (m_filter.GetVideoPin()->IsConnected() && (m_vecVideoBuffers.size() < m_initialVideoSamples))
+    if (m_filter.GetVideoPin()->IsConnected() && (m_vecVideoBuffers.size() < (4 + m_initialVideoSamples)))
     {
       return true;
     }
@@ -3091,6 +3096,47 @@ void CDeMultiplexer::CallTeletextEventCallback(int eventCode,unsigned long int e
   }
 }
 
+// Calculate rolling average audio to presentation time delta
+void CDeMultiplexer::CalcAverageAudioDelta(double delta)
+{          
+    // Calculate the mean timestamp difference
+  if (m_nNextAFT >= NB_AADSIZE)
+  {
+    m_dAudioMeanDelta = m_llAFTSumAvg / (double)NB_AADSIZE;
+  }
+  else if (m_nNextAFT > 1)
+  {
+    m_dAudioMeanDelta = m_llAFTSumAvg / (double)m_nNextAFT;
+  }
+  else
+  {
+    m_dAudioMeanDelta = delta;
+  }
+
+    // Update the rolling timestamp to presentation diff average
+    // (these values are initialised in OnThreadStartPlay())
+  int tempNextASD = (m_nNextAFT % NB_AADSIZE);
+  m_llAFTSumAvg -= m_pllAFT[tempNextASD];
+  m_pllAFT[tempNextASD] = delta;
+  m_llAFTSumAvg += delta;
+  m_nNextAFT++;
+  
+  //LogDebug("demux:CalcAverageAudioDelta, nextASD %d, TsMeanDiff %0.3f, delta %0.3f", m_nNextAFT, (float)m_dAudioMeanDelta/10000.0f, (float)delta/10000.0f);  
+}
+
+void CDeMultiplexer::ClearAverageAudDelta()
+{
+  m_nNextAFT = 0;
+	m_dAudioMeanDelta = 0.0;
+	m_llAFTSumAvg = 0.0;
+  ZeroMemory((void*)&m_pllAFT, sizeof(double) * NB_AADSIZE);
+}
+
+double CDeMultiplexer::GetAverageAudDelta()
+{
+  return m_dAudioMeanDelta;
+}
+ 
 
 //======================================================================
 

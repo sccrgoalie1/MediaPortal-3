@@ -503,6 +503,7 @@ HRESULT CVideoPin::FillBuffer(IMediaSample *pSample)
           m_pTsReaderFilter->GetMediaPosition(&RefClock) ;
           clock = (double)(RefClock-m_rtStart.m_time)/10000000.0 ;
           fTime = ((double)(cRefTime.m_time + m_pTsReaderFilter->m_ClockOnStart.m_time)/10000000.0) - clock ;
+          m_pTsReaderFilter->m_LastVideoPinDelta = (float)fTime;
                                                                       
           if (m_dRateSeeking == 1.0)
           {

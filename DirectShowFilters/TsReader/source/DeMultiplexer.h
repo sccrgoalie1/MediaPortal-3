@@ -40,6 +40,8 @@
 #include <dvdmedia.h>
 #include "MpegPesParser.h"
 
+#define NB_AADSIZE 16
+
 using namespace std;
 class CTsReaderFilter;
 
@@ -160,9 +162,11 @@ public:
   DWORD m_targetAVready;
   bool  m_bSubtitleCompensationSet;
   
-  float m_LastAudioDelta;
-  float m_LastVideoDelta;
-
+  int  m_initialAudioSamples;
+  int  m_initialVideoSamples;
+  
+  double GetAverageAudDelta();
+  
 private:
   struct stAudioStream
   {
@@ -286,7 +290,7 @@ private:
   bool m_bAudioAtEof;
   bool m_bVideoAtEof;
 
-  float m_MinAudioDelta;
+  double m_MinAudioDelta;
   float m_MinVideoDelta;
 
   bool m_bShuttingDown;
@@ -300,7 +304,13 @@ private:
   
   bool m_isNewNALUTimestamp;
   bool m_bVideoPTSroff;
+
+  void     ClearAverageAudDelta();
+  void     CalcAverageAudioDelta(double delta);
+    
+  double  m_pllAFT [NB_AADSIZE];   // buffer for average Audio ftime calculation
+  int     m_nNextAFT;
+	double  m_dAudioMeanDelta;
+	double  m_llAFTSumAvg;	
   
-  int  m_initialAudioSamples;
-  int  m_initialVideoSamples;
 };
