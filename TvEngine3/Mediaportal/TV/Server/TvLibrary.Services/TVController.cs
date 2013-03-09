@@ -112,6 +112,8 @@ namespace Mediaportal.TV.Server.TVLibrary
 
 
     /// <summary>
+    /// Local collection of cards
+    /// </summary>
     private TvCardCollection _localCardCollection;
 
     /// <summary>
