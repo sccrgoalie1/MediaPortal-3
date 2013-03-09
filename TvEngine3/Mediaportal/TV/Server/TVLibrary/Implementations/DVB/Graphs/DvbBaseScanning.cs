@@ -262,18 +262,18 @@ namespace Mediaportal.TV.Server.TVLibrary.Implementations.DVB.Graphs
             {
               newChannel.MediaType = MediaTypeEnum.Radio;
             }
-            
-            try
+
+            int tmpInt;
+            if (!int.TryParse(logicalChannelNumber, out tmpInt))
             {
-              newChannel.LogicalChannelNumber = Int32.Parse(logicalChannelNumber); //TODO this won't work for ATSC x.y LCNs. LCN must be a string.
+              tmpInt = 10000;
             }
-            catch (Exception)
-            {
-              newChannel.LogicalChannelNumber = 10000;
-            }
+
+            newChannel.LogicalChannelNumber = tmpInt; //TODO this won't work for ATSC x.y LCNs. LCN must be a string.
+
             newChannel.FreeToAir = !isEncrypted;
 
-            if (serviceName.Length == 0)
+            if (string.IsNullOrWhiteSpace(serviceName))
             {
               SetMissingServiceName(newChannel);
             }
@@ -628,7 +628,7 @@ namespace Mediaportal.TV.Server.TVLibrary.Implementations.DVB.Graphs
             }
             newChannel.FreeToAir = !isEncrypted;
 
-            if (serviceName.Length == 0)
+            if (string.IsNullOrWhiteSpace(serviceName))
             {
               SetMissingServiceName(newChannel);
             }
