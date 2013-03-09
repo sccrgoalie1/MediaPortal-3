@@ -129,7 +129,7 @@ namespace Mediaportal.TV.Server.TVLibrary.Implementations
     /// <summary>
     /// Context reference
     /// </summary>
-    protected object m_context;
+    protected object _context;
 
     /// <summary>
     /// Indicates, if the tuner is locked
@@ -692,8 +692,8 @@ namespace Mediaportal.TV.Server.TVLibrary.Implementations
     /// <value>The context.</value>
     public object Context
     {
-      get { return m_context; }
-      set { m_context = value; }
+      get { return _context; }
+      set { _context = value; }
     }
 
     /// <summary>
