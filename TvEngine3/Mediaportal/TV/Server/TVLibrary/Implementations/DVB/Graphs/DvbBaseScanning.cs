@@ -273,7 +273,7 @@ namespace Mediaportal.TV.Server.TVLibrary.Implementations.DVB.Graphs
 
             newChannel.FreeToAir = !isEncrypted;
 
-            if (string.IsNullOrWhiteSpace(serviceName))
+            if (string.IsNullOrWhiteSpace(newChannel.Name))
             {
               SetMissingServiceName(newChannel);
             }
@@ -338,7 +338,7 @@ namespace Mediaportal.TV.Server.TVLibrary.Implementations.DVB.Graphs
 
           // Stop scanning. We have to do this explicitly for a network scan in order to merge sets
           // of multiplex tuning details found in different SI tables.
-          bool isServiceInfoAvailable = false;
+          bool isServiceInfoAvailable;
           _analyzer.StopNetworkScan(out isServiceInfoAvailable);
 
           int multiplexCount;
@@ -449,7 +449,7 @@ namespace Mediaportal.TV.Server.TVLibrary.Implementations.DVB.Graphs
 
             if (isServiceInfoAvailable)
             {
-              uint key = (uint)((uint)originalNetworkId << 16) + (uint)transportStreamId;
+              uint key = ((uint)originalNetworkId << 16) + (uint)transportStreamId;
               if (multiplexesFound.ContainsKey(key))
               {
                 this.LogDebug("Tuning details for ONID 0x{0:x} and TSID 0x{1:x} are ambiguous, disregarding service information", originalNetworkId, transportStreamId);
@@ -673,7 +673,7 @@ namespace Mediaportal.TV.Server.TVLibrary.Implementations.DVB.Graphs
         {
           return (int)DvbServiceType.DigitalTelevision;
         }
-        else if (audioStreamCount != 0)
+        if (audioStreamCount != 0)
         {
           return (int)DvbServiceType.DigitalRadio;
         }
@@ -744,7 +744,7 @@ namespace Mediaportal.TV.Server.TVLibrary.Implementations.DVB.Graphs
       }
       // Default: use "Unknown <frequency>-<service ID>". At least that way people can often tell which transponder
       // the service came from.
-      dvbChannel.Name = "Unknown " + (dvbChannel.Frequency / 1000) + "-" + dvbChannel.ServiceId;
+      dvbChannel.Name = string.Format("Unknown {0}-{1}", (dvbChannel.Frequency / 1000), dvbChannel.ServiceId);
     }
 
     /// <summary>
