@@ -780,6 +780,7 @@ void CChannelScan::OnSdtReceived(const CChannelInfo& sdtInfo)
     // takes higher precedence.
     if (!info->IsPidReceived)
     {
+      LogDebug("ChannelScan: Updating IsEncrypted from %d -> %d by SDT info", info->IsEncrypted , sdtInfo.IsEncrypted);
       info->IsEncrypted = sdtInfo.IsEncrypted;
       info->IsRunning = sdtInfo.IsRunning;
     }
@@ -869,6 +870,7 @@ void CChannelScan::OnLvctReceived(const CChannelInfo& vctInfo)
     // takes higher precedence.
     if (!info->IsPidReceived)
     {
+      LogDebug("ChannelScan: Updating IsEncrypted from %d -> %d by VCT info", info->IsEncrypted , vctInfo.IsEncrypted);
       info->IsEncrypted = vctInfo.IsEncrypted;
       info->IsRunning = vctInfo.IsRunning;
     }
@@ -933,6 +935,7 @@ void CChannelScan::OnPmtReceived(const CPidTable& pidTable)
     // for encryption and running status.
     if (!info->IsServiceInfoReceived && !info->IsPidReceived)
     {
+      LogDebug("ChannelScan: Updating IsEncrypted from %d -> %d by CA descriptor count", info->IsEncrypted , pidTable.ConditionalAccessDescriptorCount > 0);
       info->IsEncrypted = pidTable.ConditionalAccessDescriptorCount > 0;
       info->IsRunning = true;
     }
@@ -1012,6 +1015,7 @@ HRESULT CChannelScan::OnEncryptionStateChange(int pid, EncryptionState encryptio
     // If no, assume that the encryption state for this elementary stream reflects the encryption state for the service.
     if (!info->IsPidReceived || !info->IsEncrypted || encryptionState == Encrypted)
     {
+      LogDebug("ChannelScan: Updating IsEncrypted from %d -> %d by encryptionState", info->IsEncrypted , (encryptionState == Encrypted));
       info->IsEncrypted = (encryptionState == Encrypted);
     }
     info->IsPidReceived = true;

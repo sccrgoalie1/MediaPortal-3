@@ -361,7 +361,7 @@ CMpTs::CMpTs(LPUNKNOWN pUnk, HRESULT *phr)
   m_id=0;
 
   LogDebug("CMpTs::ctor()");
-  LogDebug("--------------- TsWriter TVE3.5 -------------------");
+  LogDebug("--------------- TsWriter TVE3.5 ATSC Parser Fix -------------------");
 		
 	b_dumpRawPakets=false;
   m_pFilter = new CMpTsFilter(this, GetOwner(), &m_Lock, phr);
