@@ -1714,12 +1714,12 @@ void CTsReaderFilter::ThreadProc()
         //Three seconds after Run() - Set the baseline for MPAR control
         //m_dAudToPresDeltaRef = max(GetAudioPin()->GetAudToPresMeanDelta(), AUDIO_STALL_POINT);
         m_dAudToPresDeltaRef = max(m_demultiplexer.GetAverageAudDelta(), AUDIO_STALL_POINT);
-        LogDebug("CTsReaderFilter::Target Audio Delta: %f", (float)m_dAudToPresDeltaRef);
+        LogDebug("CTsReaderFilter::Target Audio Delta: %f,", (float)m_dAudToPresDeltaRef);
         
         if ((!GetVideoPin()->IsConnected() || IsRTSP()) && (m_MPARcontrolLevel >= 1)) 
         {
           m_MPARcontrolLevel = 2; //Force control for audio-only or RTSP streams
-          m_bControlMPAR = true;       
+          m_bControlMPAR = true;    
         }           
         if (GetVideoPin()->IsConnected() && !m_bEVRhasConnected) 
         {
@@ -1735,6 +1735,7 @@ void CTsReaderFilter::ThreadProc()
           SetMPARBiasFromTsR();
           AdjustClockMPARfromTsR(m_dVariableFreq);
         }
+        LogDebug("CTsReaderFilter::MPAR Init, EVR:%d, RTSP:%d, Video:%d, ControlLevel:%d, HasControl:%d", m_bEVRhasConnected, IsRTSP(), GetVideoPin()->IsConnected(), m_MPARcontrolLevel, m_bControlMPAR);             
       }
       
       if (m_pAVSyncClock && (State() == State_Running) && m_bAudToPresMDInit)
@@ -1746,6 +1747,7 @@ void CTsReaderFilter::ThreadProc()
           m_dVariableFreq = 1.0;
           m_dPreviousVariableFreq = 1.0;
           SetMPARBiasFromTsR();
+          LogDebug("CTsReaderFilter::MPAR Control Change, EVR:%d, LiveCnt:%d, Video:%d, ControlLevel:%d, HasControl:%d", m_bEVRhasConnected, isLiveCount, GetVideoPin()->IsConnected(), m_MPARcontrolLevel, m_bControlMPAR);             
         }
         if (!m_bControlMPAR && (((isLiveCount > 0) && (m_MPARcontrolLevel == 1)) || (m_MPARcontrolLevel == 2)))
         {
@@ -1754,6 +1756,7 @@ void CTsReaderFilter::ThreadProc()
           m_dPreviousVariableFreq = 1.0;
           SetMPARBiasFromTsR();
           AdjustClockMPARfromTsR(m_dVariableFreq);
+          LogDebug("CTsReaderFilter::MPAR Control Change, EVR:%d, LiveCnt:%d, Video:%d, ControlLevel:%d, HasControl:%d", m_bEVRhasConnected, isLiveCount, GetVideoPin()->IsConnected(), m_MPARcontrolLevel, m_bControlMPAR);             
         }
         
         // double averagePhaseDifference = GetAudioPin()->GetAudToPresMeanDelta() - m_dAudToPresDeltaRef;
@@ -1818,7 +1821,7 @@ void CTsReaderFilter::ThreadProc()
           //no, then get the duration from the local file
           if (m_bStreamCompensated) //Normal play started
           {          
-            if((durationUpdateLoop == 2) || m_bRecording || (State()==State_Paused))
+            if((durationUpdateLoop == 2) || m_bRecording || (State()==State_Paused) || !m_bAudToPresMDInit)
             {
               CTsDuration duration;
               duration.SetFileReader(m_fileDuration);
@@ -1856,9 +1859,30 @@ void CTsReaderFilter::ThreadProc()
                     // LogDebug("CTsReaderFilter::Duration, real end = %f", (float)endr);
                   }
                 }
-                else if (isLiveCount > 0)
+                else //real duration is the same
                 {
-                  isLiveCount--;
+                  if (isLiveCount > 0)
+                  {
+                    isLiveCount--;
+                  }
+                  
+                  //Predicted duration might be incorrect, so we need to check/correct it
+                  if (duration.StartPcr().PcrReferenceBase!=m_duration.StartPcr().PcrReferenceBase ||
+                      duration.EndPcr().PcrReferenceBase!=m_duration.EndPcr().PcrReferenceBase)
+                  {
+                    //yes, then correct m_duration
+                    m_duration.Set(duration.StartPcr(), duration.EndPcr(), duration.MaxPcr());  // Local file
+                    
+                    LogDebug("CTsReaderFilter::Duration - correction to predicted duration: %03.3f", (float)duration.Duration().Millisecs());
+                              
+                    // Is graph running?
+                    if (State() != State_Stopped)
+                    {
+                      //yes, then send a EC_LENGTH_CHANGED event to the graph
+                      NotifyEvent(EC_LENGTH_CHANGED, NULL, NULL);
+                      SetDuration();
+                    }
+                  }
                 }
   
                 lastDurUpdate = GET_TIME_NOW();
