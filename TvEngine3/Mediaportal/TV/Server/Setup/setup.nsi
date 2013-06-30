@@ -519,6 +519,9 @@ ${MementoSection} "MediaPortal TV Server" SecServer
   File "${git_TVServer}\Server\TvLibrary.IntegrationProvider.Interfaces\bin\${BUILD_TYPE}\Mediaportal.TV.Server.TVLibrary.IntegrationProvider.Interfaces.dll"
   File "${EXTBIN}\log4net.dll"
   File "${git_TVServer}\Server\SetupTv\bin\${BUILD_TYPE}\log4net.config"
+
+  ; TsReader filter
+  File "${git_DirectShowFilters}\TsReader\bin\${BUILD_TYPE}\TsReader.ax"
   
   ; Integration Directory
   SetOutPath "${SETUP_TV_FOLDER}\Integration"
@@ -794,6 +797,9 @@ ${MementoSectionEnd}
   Delete "${SETUP_TV_FOLDER}\log4net.dll"
   Delete "${SETUP_TV_FOLDER}\log4net.config"
 
+  ; Delete TsReader filter
+  Delete "${SETUP_TV_FOLDER}\TsReader.ax"
+
   ; remove Start Menu shortcuts
   Delete "${STARTMENU_GROUP}\TV-Server Configuration.lnk"
   Delete "${STARTMENU_GROUP}\TV-Server Log-Files.lnk"
@@ -923,6 +929,9 @@ ${MementoSection} "MediaPortal TV Client plugin" SecClient
   File "${EXTBIN}\EntityFramework.xml"
   File "${EXTBIN}\log4net.dll"
   File "${git_TVServer}\Server\SetupTv\bin\${BUILD_TYPE}\log4net.config"
+
+  ; TsReader filter
+  File "${git_DirectShowFilters}\TsReader\bin\${BUILD_TYPE}\TsReader.ax"
 
   ; The Plugin Directory
   SetOutPath "${SETUP_TV_FOLDER}\Plugins"
@@ -1091,6 +1100,9 @@ ${MementoSectionEnd}
   Delete "${SETUP_TV_FOLDER}\Mediaportal.TV.Server.TVDatabase.Presentation.dll"
   Delete "${SETUP_TV_FOLDER}\Integration\Mediaportal.TV.Server.TVLibrary.Integration.MP1.dll"
   Delete "${SETUP_TV_FOLDER}\Mediaportal.TV.Server.TVLibrary.IntegrationProvider.Interfaces.dll"
+
+  ; Delete TsReader filter
+  Delete "${SETUP_TV_FOLDER}\TsReader.ax"
 
   ; remove Start Menu shortcuts
   Delete "${STARTMENU_GROUP}\TV-Server Configuration.lnk"
