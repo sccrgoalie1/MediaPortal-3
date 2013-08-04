@@ -230,33 +230,59 @@ void CPmtParser::OnNewSection(CSection& section)
               }
             }
             
-            if(!pidFound)
-            {
-              int descriptorLen = section.Data[pointer+1];
-              TempPid pid;
-              pid.Pid=elementary_PID;
-              pid.Lang[0]=section.Data[pointer+2];
-              pid.Lang[1]=section.Data[pointer+3];
-              pid.Lang[2]=section.Data[pointer+4];
-              // Get the additional language descriptor data (NORSWE etc.)
-              if( descriptorLen == 8 )
-              {
-                pid.Lang[3]=section.Data[pointer+6];
-                pid.Lang[4]=section.Data[pointer+7];
-                pid.Lang[5]=section.Data[pointer+8];
-              }
-              else
-              {
-                pid.Lang[3]=0;
-                pid.Lang[4]=0;
-                pid.Lang[5]=0;
-              }
-              LogDebug("pmt parser - DESCRIPTOR_MPEG_ISO639_Lang noPidFound, pid: %4x, language: %3s", pid.Pid, pid.Lang);
-  
-              tempPids.push_back(pid);
-            }
+//            if(!pidFound)
+//            {
+//              int descriptorLen = section.Data[pointer+1];
+//              TempPid pid;
+//              pid.Pid=elementary_PID;
+//              pid.Lang[0]=section.Data[pointer+2];
+//              pid.Lang[1]=section.Data[pointer+3];
+//              pid.Lang[2]=section.Data[pointer+4];
+//              // Get the additional language descriptor data (NORSWE etc.)
+//              if( descriptorLen == 8 )
+//              {
+//                pid.Lang[3]=section.Data[pointer+6];
+//                pid.Lang[4]=section.Data[pointer+7];
+//                pid.Lang[5]=section.Data[pointer+8];
+//              }
+//              else
+//              {
+//                pid.Lang[3]=0;
+//                pid.Lang[4]=0;
+//                pid.Lang[5]=0;
+//              }
+//              LogDebug("pmt parser - DESCRIPTOR_MPEG_ISO639_Lang noPidFound, pid: %4x, language: %3s", pid.Pid, pid.Lang);
+//  
+//              tempPids.push_back(pid);
+//            }
           }
-        }
+
+          if(!pidFound)
+          {
+            int descriptorLen = section.Data[pointer+1];
+            TempPid pid;
+            pid.Pid=elementary_PID;
+            pid.Lang[0]=section.Data[pointer+2];
+            pid.Lang[1]=section.Data[pointer+3];
+            pid.Lang[2]=section.Data[pointer+4];
+            // Get the additional language descriptor data (NORSWE etc.)
+            if( descriptorLen == 8 )
+            {
+              pid.Lang[3]=section.Data[pointer+6];
+              pid.Lang[4]=section.Data[pointer+7];
+              pid.Lang[5]=section.Data[pointer+8];
+            }
+            else
+            {
+              pid.Lang[3]=0;
+              pid.Lang[4]=0;
+              pid.Lang[5]=0;
+            }
+            LogDebug("pmt parser - DESCRIPTOR_MPEG_ISO639_Lang noPidFound, pid: %4x, language: %3s", pid.Pid, pid.Lang);
+
+            tempPids.push_back(pid);
+          }
+       }
         if(indicator==DESCRIPTOR_VBI_TELETEXT)
         {
           //LogDebug("VBI teletext descriptor");
