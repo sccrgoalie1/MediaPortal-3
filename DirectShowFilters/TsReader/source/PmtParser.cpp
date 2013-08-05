@@ -123,12 +123,12 @@ void CPmtParser::OnNewSection(CSection& section)
         stream_type==SERVICE_TYPE_AUDIO_AC3 || 
         stream_type==SERVICE_TYPE_AUDIO_AAC || 
         stream_type==SERVICE_TYPE_AUDIO_LATM_AAC ||
-        stream_type==SERVICE_TYPE_AUDIO_DD_PLUS )
+        stream_type==SERVICE_TYPE_AUDIO_DD_PLUS ||
+        stream_type==SERVICE_TYPE_AUDIO_E_AC3)
       {				  
         AudioPid pid;
         pid.Pid=elementary_PID;
         pid.AudioServiceType=stream_type;
-        //LogDebug("pmt parser - audio found, pid: %4x, stream_type: %4x", pid.Pid, pid.AudioServiceType);
         m_pidInfo.audioPids.push_back(pid);
       }
       m_pidInfo.PcrPid=pcr_pid;
@@ -154,15 +154,11 @@ void CPmtParser::OnNewSection(CSection& section)
           AudioPid pid;
           pid.Pid=elementary_PID;
           pid.AudioServiceType=(indicator==DESCRIPTOR_DVB_AC3) ? SERVICE_TYPE_AUDIO_AC3 : SERVICE_TYPE_AUDIO_DD_PLUS;
-
-          //LogDebug("pmt parser - DVB_AC3 audio found");
           
-          for(int i(0); i<(int)tempPids.size(); i++)
+          for(unsigned int i(0); i<tempPids.size(); i++)
           {
-            //LogDebug("pmt parser - DVB_AC3 audio, pid: %4x, language: %3s", tempPids[i].Pid, tempPids[i].Lang);
             if(tempPids[i].Pid==elementary_PID)
             {
-              //LogDebug("pmt parser - DVB_AC3 audio - is elementary_PID, pid: %4x, language: %3s", tempPids[i].Pid, tempPids[i].Lang);
               pid.Lang[0]=tempPids[i].Lang[0];
               pid.Lang[1]=tempPids[i].Lang[1];
               pid.Lang[2]=tempPids[i].Lang[2];
@@ -188,8 +184,6 @@ void CPmtParser::OnNewSection(CSection& section)
 
           bool pidFound(false);
 
-          //LogDebug("pmt parser - DESCRIPTOR_MPEG_ISO639_Lang indicator");
-
           // Find corresponding audio stream by PID, if not found
           // the stream type should be unknown to us
           for(unsigned int i(0); i<m_pidInfo.audioPids.size(); i++)
@@ -211,7 +205,6 @@ void CPmtParser::OnNewSection(CSection& section)
                 m_pidInfo.audioPids[i].Lang[5]=section.Data[pointer+8];
                 m_pidInfo.audioPids[i].Lang[6]=0;
               }
-              //LogDebug("pmt parser - DESCRIPTOR_MPEG_ISO639_Lang audio, pid: %4x, language: %3s", m_pidInfo.audioPids[i].Pid, m_pidInfo.audioPids[i].Lang);
 
               pidFound=true;
             }
@@ -225,40 +218,15 @@ void CPmtParser::OnNewSection(CSection& section)
                 m_pidInfo.subtitlePids[i].Lang[1]=section.Data[pointer+3];
                 m_pidInfo.subtitlePids[i].Lang[2]=section.Data[pointer+4];
                 m_pidInfo.subtitlePids[i].Lang[3]=0;
-                //LogDebug("pmt parser - DESCRIPTOR_MPEG_ISO639_Lang subtitle, pid: %4x, language: %3s", m_pidInfo.subtitlePids[i].Pid, m_pidInfo.subtitlePids[i].Lang);
                 pidFound=true;
               }
-            }
-            
-//            if(!pidFound)
-//            {
-//              int descriptorLen = section.Data[pointer+1];
-//              TempPid pid;
-//              pid.Pid=elementary_PID;
-//              pid.Lang[0]=section.Data[pointer+2];
-//              pid.Lang[1]=section.Data[pointer+3];
-//              pid.Lang[2]=section.Data[pointer+4];
-//              // Get the additional language descriptor data (NORSWE etc.)
-//              if( descriptorLen == 8 )
-//              {
-//                pid.Lang[3]=section.Data[pointer+6];
-//                pid.Lang[4]=section.Data[pointer+7];
-//                pid.Lang[5]=section.Data[pointer+8];
-//              }
-//              else
-//              {
-//                pid.Lang[3]=0;
-//                pid.Lang[4]=0;
-//                pid.Lang[5]=0;
-//              }
-//              LogDebug("pmt parser - DESCRIPTOR_MPEG_ISO639_Lang noPidFound, pid: %4x, language: %3s", pid.Pid, pid.Lang);
-//  
-//              tempPids.push_back(pid);
-//            }
+            }            
           }
 
           if(!pidFound)
           {
+            //Create a temporary pid to hold the language data - needed for some 
+            //AC3 streams (which are carried as private streams i.e. stream_type = 0x6) 
             int descriptorLen = section.Data[pointer+1];
             TempPid pid;
             pid.Pid=elementary_PID;
@@ -278,7 +246,6 @@ void CPmtParser::OnNewSection(CSection& section)
               pid.Lang[4]=0;
               pid.Lang[5]=0;
             }
-            //LogDebug("pmt parser - DESCRIPTOR_MPEG_ISO639_Lang noPidFound, pid: %4x, language: %3s", pid.Pid, pid.Lang);
 
             tempPids.push_back(pid);
           }

@@ -356,6 +356,16 @@ void CDeMultiplexer::GetAudioStreamType(int stream,CMediaType& pmt)
       pmt.SetFormatType(&FORMAT_WaveFormatEx);
       pmt.SetFormat(AC3AudioFormat,sizeof(AC3AudioFormat));
       break;
+    case SERVICE_TYPE_AUDIO_E_AC3:  //ATSC E-AC3 (DD plus)
+      pmt.InitMediaType();
+      pmt.SetType      (& MEDIATYPE_Audio);
+      pmt.SetSubtype   (& MEDIASUBTYPE_DOLBY_DDPLUS);
+      pmt.SetSampleSize(1);
+      pmt.SetTemporalCompression(FALSE);
+      pmt.SetVariableSize();
+      pmt.SetFormatType(&FORMAT_WaveFormatEx);
+      pmt.SetFormat(AC3AudioFormat,sizeof(AC3AudioFormat));
+      break;
   }
 }
 // This methods selects the subtitle stream specified
